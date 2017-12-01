@@ -76,36 +76,3 @@ def avg_filter(pixels,m,n):
 	if isVisible:
 		pixels[Memory_position_x,Memory_position_y]=sum
 		
-if __name__== '__main__' :
-	sp_noise='lena_sp_noise.png'
-
-	img = cv2.imread('/home/mahir/SciPy/'+sp_noise,cv2.IMREAD_GRAYSCALE)
-	x,y=img.shape
-	if img is None:
-		print('No Image found')
-		exit()
-
-	d_img=cuda.to_device(img)
-	TPB=(kernel_width,kernel_width)
-	BPG=(x,y)
-
-	start =time.time()
-	avg_filter[BPG,TPB](d_img,x-1,y-1)
-	cuda.synchronize()
-	end1=time.time()-start
-	output=d_img.copy_to_host()
-
-	start=time.time()
-	blur = cv2.blur(img,(3,3))
-	end2=time.time()-start
-
-	cv2.imshow('Original',img)
-	cv2.imshow('Cuda',output)
-	cv2.imshow('Opencv',blur)
-	cv2.waitKey(0)
-
-	print('Cuda Implementation:',end1*1000,' ms')
-	print('Opencv Implementation:',end2*1000,' ms')
-	cv2.destroyAllwindow/kernels()
-
-
