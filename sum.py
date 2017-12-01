@@ -1,8 +1,22 @@
+"""
+Execution syntax:
+python sum.py [-no,-cu,-ni,-ci]
+
+args:
+	-no: prints only upto naive call
+	-cu: prints only upto cuda ufunction call
+	-ni: prints only upto Numpy call
+	-ci: prints only upto cuda kernel call
+	<empty> : prints everything including cuda kernel with shared memory.
+
+"""
 from numba import cuda,vectorize,float32
 import numpy as np
 import time
 import sys
 
+
+var=True if len(sys.argv)>1 else False
 
 """Cuda Implementation of Numpy ufunction """
 @vectorize(['float32(float32, float32)'], target='cuda')
@@ -40,63 +54,60 @@ n = 1000000
 a=np.random.rand(n).astype(np.float32)
 b=np.random.rand(n).astype(np.float32)
 
-d_a=cuda.to_device(a)
-d_out=cuda.device_array_like(d_a)
-d_b=cuda.to_device(b)
-
-	
+print('\vAddition of two ',n,' sized array','\n\n\tTime to Compute:\n')	
 
 """Naive Function Call and Profiling """
 naive_a=np.copy(a)
 naive_b=np.copy(b)
-naive_start=time.time()
-naive_a=naive_sum(naive_a,naive_b)
-naive_eta=time.time()-naive_start
-
-"""Cuda Kernel Call"""
-threadperblock=32
-blockspergrid=(n+threadperblock-1)//threadperblock
 start=time.time()
+naive_a=naive_sum(naive_a,naive_b)
+end=time.time()-start
+print('\tNaive Implementation:\t\t%10f'%(end*1000),' ms')
+if var and sys.argv[1]=='-no':
+	exit()
 
-sum[blockspergrid,threadperblock](d_a,d_b,d_out) 
-cuda.synchronize()
+""" Cuda Ufunction Call"""
+start=time.time()
+output=add_ufunc(a,b)
+end=time.time()-start
 
-eta=time.time()-start
-
-h_out=d_out.copy_to_host()
+print('\tCuda  uFunction     :\t\t%10f'%(end*1000),' ms')
+if var and sys.argv[1]=='-cu':
+	exit()
 
 """ Numpy UFunction Call"""
 start=time.time()
 out=np.add(a,b)
 end=time.time()-start
+print('\tNumpy Implementation:\t\t%10f'%(end*1000), ' ms')
+if var and sys.argv[1]=='-ni':
+	exit()
 
-""" Cuda Ufunction Call"""
+"""Cuda Kernel Call"""
+threadperblock=32
+blockspergrid=(n+threadperblock-1)//threadperblock
+
+d_a=cuda.to_device(a)
+d_out=cuda.device_array_like(d_a)
+d_b=cuda.to_device(b)
+
 start=time.time()
-output=add_ufunc(a,b)
-end_cuda_ufunc=time.time()-start
 
+sum[blockspergrid,threadperblock](d_a,d_b,d_out) 
+cuda.synchronize()
+
+end=time.time()-start
+
+print('\tCUDA  Implementation:\t\t%10f'%(end*1000),' ms')
+if var and sys.argv[1]=='-ci':
+	exit()
 
 """ Cuda Add Function with Shared Memory"""
-threadperblock=256
+threadperblock=32
 blockspergrid=(n+threadperblock-1)//threadperblock
 start=time.time()
 sum_shared_memory[blockspergrid,threadperblock](d_a,d_b)
 cuda.synchronize()
-end_shared=time.time()-start
+end=time.time()-start
 
-var=True if len(sys.argv)>1 else False
-
-print('\vAddition of two ',n,' sized array','\n\n\tTime to Compute:\n')
-print('\tNaive Implementation:\t\t%10f'%(naive_eta*1000),' ms')
-if var and sys.argv[1]=='-no':
-	exit()
-print('\tCuda  uFunction     :\t\t%10f'%(end_cuda_ufunc*1000),' ms')
-if var and sys.argv[1]=='-cu':
-	exit()
-print('\tNumpy Implementation:\t\t%10f'%(end*1000), ' ms')
-if var and sys.argv[1]=='-ni':
-	exit()
-print('\tCUDA  Implementation:\t\t%10f'%(eta*1000),' ms')
-if var and sys.argv[1]=='-ci':
-	exit()
-print('\tCuda  Shared Memory :\t\t%10f'%(end_shared*1000),' ms')
+print('\tCuda  Shared Memory :\t\t%10f'%(end*1000),' ms')

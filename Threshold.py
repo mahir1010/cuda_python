@@ -17,6 +17,10 @@ def naive_zero_suppress(signal,threshold):
 		if signal[i] < threshold:
 			signal[i]=0
 
+"""
+	This function simply suppresses those values which are less than the given threshold.
+	This function was actually an exercise of the Jupyter notebook by ContinuumIO.
+"""
 @cuda.jit('void(int16[:],int16)')
 def zero_suppress(device_array,threshold):
 	id=cuda.grid(1)
@@ -28,11 +32,15 @@ def zero_suppress(device_array,threshold):
 d_waveform=cuda.to_device(waveform)
 threadsperBlock=32
 blockspergrid=(d_waveform.size+ (threadsperBlock-1)) // threadsperBlock
+"""Timing Cuda Function"""
 start=time.time()
 zero_suppress[blockspergrid,threadsperBlock](d_waveform,15)
 cuda.synchronize()
 cuda_end=time.time()-start
 
+"""
+Timing naive function
+"""
 start=time.time()
 naive_zero_suppress(waveform,15)
 end=time.time()-start

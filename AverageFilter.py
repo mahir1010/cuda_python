@@ -5,25 +5,59 @@ import time
 
 
 kernel_width=3
-"""	
-	avg_filter : A function which uses a window to traverse over every pixels of the image .
-	It computes average of every elements in a window and and sets every element to that value.
-	This function runs parallely by computing window at every pixel simultaneously.
-	Number of Thread Blocks = Number of Pixels
-	Number of Threads = Number of Thread Blocks * power(kernel_size,2)
-	Parameters:
-	pixels: An array of size mxn pixels where m and n are the dimensions of an image ane the elements of the array are the intensity 
-	values at every pixel.
-"""
+
 @cuda.jit('void(uint8[:,:],int32,int32)')
 def avg_filter(pixels,m,n):
+	"""	
+	avg_filter : A function which uses a window/kernel to traverse over every pixels of the image .
+		It computes average of every elements in a window/kernel and and sets every element to that value.
+		This function runs parallely by computing window/kernel at every pixel simultaneously.
+		Number of thread blocks = Number of Pixels
+		Number of threads per block = kernel_width * kernel_width
+		Number of threads = Number of Thread Blocks * Number of threads per block
+	Parameters:
+		pixels: An array of size mxn pixels where m and n are the dimensions of an image and the elements of the array are the intensity 
+		values at every pixel.
+		m:it is the width of the image
+		n:it is the hight of the image
+	Example:
+		[ [0,0,32,123,255,134,....]
+		  [0,0,22,23,35,1,........]
+		  [6,0,102,13,25,34,......]
+		  [0,10,72,1,55,13,.......]
+		  [10,6,22,12,202,14,.....]
+		  ...
+		  ...
+		  [0,0,32,123,255,134,....]]
+	
+		Pixel Coordinate = [1,1]
+		kernel=[[0,0,32]
+				[0,0,22]
+				[6,0,102]]
+		average= (0+0+32+0+0+22+6+0+102) // 9 =18
+		output in image = [[18,18,18]
+						   [18,18,18]
+						   [18,18,18]]
+
+	Note:
+		For border-pixels the adjacent pixels in the kernel which are non existant in the image are set to zero intensity
+		These pixel are detected by computing whether their cordinates are either negative or greater than the dimension 
+		of the image
+		For first block the center of the kernel would be the first pixel of the image therefore the pixels at position:
+		[0,0],[0,1],[0,2],[1,0] and [2,0] would have global coordinates having value less than 0 hence they are actually
+		non existant.Therefore their intensity value is set to zero.
+		The global coordinates in the memory are computed by following formulae:
+		Memory_position_x=block_id_x+thread_id_x-1
+		Memory_position_y=block_id_y+thread_id_y-1 
+	"""
+
 	sub_img=cuda.shared.array(shape=(kernel_width,kernel_width),dtype=uint8) #A shared array to store the elements of the kernel
 	block_id_x=cuda.blockIdx.x
 	block_id_y=cuda.blockIdx.y
 	thread_id_x=cuda.threadIdx.x
 	thread_id_y=cuda.threadIdx.y
-	Memory_position_x=block_id_x+thread_id_x
-	Memory_position_y=block_id_y+thread_id_y
+	Memory_position_x=block_id_x+thread_id_x-1
+	Memory_position_y=block_id_y+thread_id_y-1
 	"""
 		isVisible computes whether the pixel actually exists or not
 		is false for every pixels outside the image boundary hence the intensity level must be set to 0
@@ -41,35 +75,37 @@ def avg_filter(pixels,m,n):
 	sum//=kernel_width*kernel_width
 	if isVisible:
 		pixels[Memory_position_x,Memory_position_y]=sum
+		
+if __name__== '__main__' :
+	sp_noise='lena_sp_noise.png'
 
-sp_noise='lena_sp_noise.png'
+	img = cv2.imread('/home/mahir/SciPy/'+sp_noise,cv2.IMREAD_GRAYSCALE)
+	x,y=img.shape
+	if img is None:
+		print('No Image found')
+		exit()
 
-img = cv2.imread('/home/mahir/SciPy/'+sp_noise,cv2.IMREAD_GRAYSCALE)
-x,y=img.shape
-if img is None:
-	print('No Image found')
-	exit()
+	d_img=cuda.to_device(img)
+	TPB=(kernel_width,kernel_width)
+	BPG=(x,y)
 
-d_img=cuda.to_device(img)
-TPB=(kernel_width,kernel_width)
-BPG=(x,y)
+	start =time.time()
+	avg_filter[BPG,TPB](d_img,x-1,y-1)
+	cuda.synchronize()
+	end1=time.time()-start
+	output=d_img.copy_to_host()
 
-start =time.time()
-avg_filter[BPG,TPB](d_img,x-1,y-1)
-cuda.synchronize()
-end1=time.time()-start
-output=d_img.copy_to_host()
+	start=time.time()
+	blur = cv2.blur(img,(3,3))
+	end2=time.time()-start
 
-start=time.time()
-blur = cv2.blur(img,(3,3))
-end2=time.time()-start
+	cv2.imshow('Original',img)
+	cv2.imshow('Cuda',output)
+	cv2.imshow('Opencv',blur)
+	cv2.waitKey(0)
 
-cv2.imshow('Original',img)
-cv2.imshow('Cuda',output)
-cv2.imshow('Opencv',blur)
-cv2.waitKey(0)
-
-print('Cuda Implementation:',end1*1000,' ms')
-print('Opencv Implementation:',end2*1000,' ms')
+	print('Cuda Implementation:',end1*1000,' ms')
+	print('Opencv Implementation:',end2*1000,' ms')
+	cv2.destroyAllwindow/kernels()
 
 
